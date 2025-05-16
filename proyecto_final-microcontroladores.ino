@@ -1,25 +1,21 @@
 #include <DHT.h>
 
-// === Pines y configuración ===
 const int pinHumedad = A0;
 const int pinBuzzer = 8;
 const int pinDHT = 4;
 #define DHTTYPE DHT11
 DHT dht(pinDHT, DHTTYPE);
 
-// Sensor de luminosidad
-const int pinLuzAO = A1;     // Salida analógica del sensor de luz
-const int pinLuzDO = 2;      // Salida digital del sensor de luz
+const int pinLuzAO = A1;     
+const int pinLuzDO = 2;      
 
-// Sensor SRF05 (proximidad)
 const int trigPin = 9;
 const int echoPin = 10;
-const float umbralDistancia = 10.0; // cm
+const float umbralDistancia = 10.0; 
 
 const int potPin = A2; 
 const int ledPin = 6; 
 
-// Notas musicales (frecuencias en Hz)
 #define NOTE_C4  262
 #define NOTE_D4  294
 #define NOTE_E4  330
@@ -29,7 +25,6 @@ const int ledPin = 6;
 #define NOTE_B4  494
 #define NOTE_C5  523
 
-// Variables de estado alarma
 bool alarmaHumedad = false;
 bool alarmaTempAlta = false;
 bool alarmaTempBaja = false;
@@ -50,12 +45,10 @@ void setup() {
 }
 
 void loop() {
-
-  int potValue = analogRead(potPin);          // Leer valor del potenciómetro (0–1023)
-  int ledBrightness = map(potValue, 0, 1023, 0, 255); // Convertir a valor PWM (0–255)
+  int potValue = analogRead(potPin);          
+  int ledBrightness = map(potValue, 0, 1023, 0, 255); 
   analogWrite(ledPin, ledBrightness);   
 
-  // === HUMEDAD DEL SUELO ===
   int valorSensor = analogRead(pinHumedad);
   int valorAjustado = max(valorSensor, 400);
   int porcentajeHumedad = map(valorAjustado, 400, 1023, 100, 0);
@@ -72,17 +65,60 @@ void loop() {
     alarmaHumedad = false;
   }
 
+  float tempC = dht.readTemperature();
+  alarmaTempAlta = false;
+  alarmaTempBaja = false;
+
+  int valorLuz = analogRead(pinLuzAO);
+  int porcentajeLuz = map(valorLuz, 1023, 0, 0, 100);
+
+  alarmaLuzAlta = porcentajeLuz > 80;
+
+  long duration;
+  float distanceCm;
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  duration = pulseIn(echoPin, HIGH);
+
+  distanceCm = (duration * 0.0343) / 2;
+
+  alarmaProximidad = (distanceCm > 0 && distanceCm <= umbralDistancia);
+
+  if (alarmaHumedad) {
+    sirenaEmergencia(5);
+  } 
+  else if (alarmaTempAlta) {
+    alarmaTemperaturaAlta();
+  } 
+  else if (alarmaTempBaja) {
+    alarmaTemperaturaBaja();
+  } 
+  else if (alarmaProximidad) {
+    tone(pinBuzzer, 1500);
+    delay(2000);
+    noTone(pinBuzzer);
+  } 
+  else if (alarmaLuzAlta) {
+    tone(pinBuzzer, 1000);
+    delay(2000);
+    noTone(pinBuzzer);
+  } 
+  else {
+    noTone(pinBuzzer);
+  }
+
   Serial.print("Humedad del suelo: ");
   Serial.print(nivel);
   Serial.print(" - ");
   Serial.print(porcentajeHumedad);
   Serial.print("% - Valor: ");
   Serial.println(valorSensor);
-
-  // === TEMPERATURA DHT11 ===
-  float tempC = dht.readTemperature();
-  alarmaTempAlta = false;
-  alarmaTempBaja = false;
 
   if (isnan(tempC)) {
     Serial.println("Error al leer el sensor DHT11");
@@ -100,69 +136,17 @@ void loop() {
     }
   }
 
-  // === SENSOR DE LUMINOSIDAD ===
-  int valorLuz = analogRead(pinLuzAO);
-  int porcentajeLuz = map(valorLuz, 1023, 0, 0, 100);
-
   Serial.print("Luminosidad: ");
   Serial.print(porcentajeLuz);
   Serial.println("%");
 
-  alarmaLuzAlta = porcentajeLuz > 80;
-
-  // === SENSOR SRF05 (Proximidad) ===
-  long duration;
-  float distanceCm;
-
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  duration = pulseIn(echoPin, HIGH);
-
-  distanceCm = (duration * 0.0343) / 2;
-
   Serial.print("Distancia: ");
   Serial.print(distanceCm);
   Serial.println(" cm");
+  Serial.println("------------------------------------------------");
 
-  alarmaProximidad = (distanceCm > 0 && distanceCm <= umbralDistancia);
-
-  // === CONTROL DE BUZZER SEGÚN PRIORIDAD ===
-  // Prioridad: Humedad > Temp alta > Temp baja > Proximidad > Luz alta
-
-  if (alarmaHumedad) {
-    sirenaEmergencia(5);
-  } 
-  else if (alarmaTempAlta) {
-    alarmaTemperaturaAlta();
-  } 
-  else if (alarmaTempBaja) {
-    alarmaTemperaturaBaja();
-  } 
-  else if (alarmaProximidad) {
-    tone(pinBuzzer, 1500); // Buzzer proximidad
-    delay(2000);
-    noTone(pinBuzzer);
-  } 
-  else if (alarmaLuzAlta) {
-    tone(pinBuzzer, 1000); // Buzzer luz alta
-    delay(2000);
-    noTone(pinBuzzer);
-  } 
-  else {
-    noTone(pinBuzzer); // Apagar buzzer si no hay alarmas
-  }
-
-  delay(2000);
-
+  delay(9000);
 }
-
-
-// Funciones buzzer
 
 void sirenaEmergencia(int repeticiones) {
   for (int r = 0; r < repeticiones; r++) {
